@@ -1,11 +1,18 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
+	"time"
 
 	"github.com/ehubscher/goidp/internal/authn"
 	"github.com/joho/godotenv"
@@ -17,6 +24,58 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	router := http.NewServeMux()
+	router.HandleFunc("GET /", func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+		fmt.Fprint(rw, "ROOT: under construction")
+	})
+
+	var host string = os.Getenv("SERVER_HOST")
+	port, err := strconv.Atoi(os.Getenv("SERVER_PORT"))
+	if err != nil {
+		slog.Error("Failed to parse SERVER_PORT into int type. Double check configuration.")
+		log.Fatalf("%v", err)
+	}
+
+	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+
+	var server = &http.Server{
+		Addr:           fmt.Sprintf("%s:%d", host, port),
+		Handler:        router,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+		BaseContext: func(l net.Listener) context.Context {
+			return baseCtx
+		},
+	}
+
+	slog.Info("Listening for request...", "host", host, "port", port)
+
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt)
+		<-sigint
+
+		// We received an interrupt signal, shutdown.
+		cancelBaseCtx()
+		if err := server.Shutdown(baseCtx); err != nil {
+			// Error from closing listeners or context timeout
+			slog.Error("HTTP server Shutdown", "err", err)
+		}
+
+		close(idleConnsClosed)
+	}()
+
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		// Error starting or closing listener
+		slog.Error("HTTP server ListenAndServer", "err", err)
+	}
+
+	<-idleConnsClosed
+	<-baseCtx.Done()
 
 	argon2idB64Hash, err := authn.GenerateHash("argon2id", "password123")
 	if err != nil {
