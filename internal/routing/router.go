@@ -1,9 +1,53 @@
-package main
+package routing
 
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
+
+type HttpMethod int
+type HttpMethodStr string
+
+const (
+	GET HttpMethod = iota
+	POST
+	PUT
+	DELETE
+	PATCH
+	OPTIONS
+	HEAD
+)
+
+var httpMethods = map[string]HttpMethod{
+	http.MethodGet:     GET,
+	http.MethodPost:    POST,
+	http.MethodPut:     PUT,
+	http.MethodDelete:  DELETE,
+	http.MethodPatch:   PATCH,
+	http.MethodOptions: OPTIONS,
+	http.MethodHead:    HEAD,
+}
+
+func IsValidHttpMethod(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	_, ok := httpMethods[strings.ToUpper(strings.TrimSpace(s))]
+	return ok
+}
+
+func (s HttpMethodStr) IsValid() bool {
+	if s == "" {
+		return false
+	}
+
+	_, ok := httpMethods[strings.ToUpper(strings.TrimSpace(string(s)))]
+	return ok
+}
+
+type Middleware func(http.Handler) http.Handler
 
 type Route struct {
 	Method  string
@@ -35,9 +79,13 @@ func (r *Router) WrapMiddlewares() {
 }
 
 // Register each route handler to the router's Mux.
-// TODO: Check that the given route.Method is indeed a valid HTTP verb.
 func (r *Router) RegisterHandlers() {
 	for _, route := range r.Routes {
+		if !IsValidHttpMethod(route.Method) {
+			// TODO: Fail?
+			continue
+		}
+
 		r.Mux.Handle(fmt.Sprintf("%s %s", route.Method, route.Path), route.Handler)
 	}
 }
