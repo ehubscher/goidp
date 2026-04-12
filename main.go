@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ehubscher/goidp/internal/authn"
+	"github.com/ehubscher/goidp/internal/routing"
 	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 )
@@ -25,11 +26,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	router := http.NewServeMux()
-	router.HandleFunc("GET /", func(rw http.ResponseWriter, r *http.Request) {
-		rw.WriteHeader(http.StatusOK)
-		fmt.Fprint(rw, "ROOT: under construction")
-	})
+	router := routing.Router{
+		Mux:         http.NewServeMux(),
+		Routes:      routing.Routes,
+		Middlewares: []routing.Middleware{},
+	}
+	router.RegisterHandlers()
 
 	var host string = os.Getenv("SERVER_HOST")
 	port, err := strconv.Atoi(os.Getenv("SERVER_PORT"))
@@ -42,7 +44,7 @@ func main() {
 
 	var server = &http.Server{
 		Addr:           fmt.Sprintf("%s:%d", host, port),
-		Handler:        router,
+		Handler:        router.Mux,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,

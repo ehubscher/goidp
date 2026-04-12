@@ -7,7 +7,6 @@ import (
 )
 
 type HttpMethod int
-type HttpMethodStr string
 
 const (
 	GET HttpMethod = iota
@@ -38,15 +37,6 @@ func IsValidHttpMethod(s string) bool {
 	return ok
 }
 
-func (s HttpMethodStr) IsValid() bool {
-	if s == "" {
-		return false
-	}
-
-	_, ok := httpMethods[strings.ToUpper(strings.TrimSpace(string(s)))]
-	return ok
-}
-
 type Middleware func(http.Handler) http.Handler
 
 type Route struct {
@@ -57,7 +47,7 @@ type Route struct {
 
 type Router struct {
 	Mux         *http.ServeMux
-	Routes      map[string]Route
+	Routes      []Route
 	Middlewares []Middleware
 }
 
@@ -82,7 +72,7 @@ func (r *Router) WrapMiddlewares() {
 func (r *Router) RegisterHandlers() {
 	for _, route := range r.Routes {
 		if !IsValidHttpMethod(route.Method) {
-			// TODO: Fail?
+			// TODO: Fatal...?
 			continue
 		}
 
